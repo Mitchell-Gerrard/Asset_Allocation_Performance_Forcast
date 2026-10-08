@@ -10,7 +10,7 @@ y_train = pd.read_csv('data/y_train.csv',index_col='ROW_ID')
 sample_submission = pd.read_csv('data/sample_submission.csv',index_col='ROW_ID')
 total_data = pd.concat([X_train,y_train],axis=1)
 
-minimal_features = ['RET_1',"MEDIAN_DAILY_TURNOVER"]
+minimal_features = ['RET_1']
 
 X_train_minimal = X_train.copy()
 

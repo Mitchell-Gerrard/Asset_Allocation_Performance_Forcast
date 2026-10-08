@@ -1,0 +1,89 @@
+Asset Allocation Model Notes
+============================
+
+What we changed
+---------------
+The original cross-validation split used indices from the unique TS dates as
+if they were row indices. That produced an inflated validation accuracy of
+about 62%. The validation logic was corrected to split the unique TS values,
+then select every training row belonging to the chosen dates. Each fold now
+uses separate copies of the training and validation data.
+
+The Bayesian allocation encoding is calculated using only the training rows
+of each fold. The validation rows receive the training-fold allocation rates,
+with the training-fold global rate used for unseen allocations. This prevents
+validation target leakage.
+
+The final model uses the full training data to calculate the Bayesian
+allocation encoding. The same engineered feature list is then used for both
+the final training data and the test data. Test prediction uses only
+minimal_features, so string columns such as TS and ALLOCATION are not passed
+to LightGBM.
+
+Feature construction
+--------------------
+The model uses exactly 76 numeric columns in `minimal_features`. It does not
+pass the string columns `TS` or `ALLOCATION` directly to LightGBM. Those
+columns are used only to construct grouped features and the allocation
+encoding.
+
+The 76 columns are:
+
+- RET_1 through RET_20
+- SIGNED_VOLUME_1 through SIGNED_VOLUME_20
+- MEDIAN_DAILY_TURNOVER
+- Average return features over windows 3, 5, 10, 15, and 20
+- Cross-sectional average versions of the average-return features
+- Standard deviation of returns over window 20
+- Cross-sectional average of the return standard deviation
+- Cross-sectional z-scores for RET_1 through RET_20
+- CROSS_SECTIONAL_AVG_RET1
+- `CROSS_SECTIONAL_AVG_RET1`
+- `ALLOC_bayesian_ENCODING`
+- `RET_1_X_ALLOC`
+
+Current model
+-------------
+Model: LightGBM binary classifier
+
+Parameters currently used:
+
+objective: binary
+metric: binary_error
+seed: 42
+learning_rate: 0.01
+max_depth: 3
+feature_fraction: 0.3
+bagging_fraction: 0.5
+bagging_freq: 1
+verbosity: -1
+NUM_BOOST_ROUND: 500
+prediction threshold: 0.501 for the final submission
+
+Validation result
+-----------------
+Corrected date-based 16-fold validation:
+
+Combined model accuracy: 52.61% (+/- 0.62%)
+Final full-training accuracy: 53.76%
+
+The earlier approximately 62% result was not comparable because the folds
+were selected incorrectly. The corrected score is the more reliable local
+estimate.
+
+Submission result
+-----------------
+The corrected model produced a competition score of approximately 760. This
+was better than expected from the corrected local validation score, so it is
+kept as the current baseline.
+
+Output file:
+outputs/predictions_lgbm_allocations_cross_more_volume_bin_plus_bays_baseline_bagging_optimisation_changed_folds.csv
+
+Next experiment
+---------------
+Use a separate parameter-sweep script rather than changing the baseline
+script. The first parameters worth testing are learning_rate, num_leaves,
+max_depth, feature_fraction, bagging_fraction, and NUM_BOOST_ROUND. Compare
+competition submissions against the corrected date-fold validation, not the
+old inflated score or the in-sample training accuracy.
