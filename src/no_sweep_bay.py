@@ -200,6 +200,44 @@ for fold_idx, (train_date_idx, val_date_idx) in enumerate(
     oof.loc[val_df.index, 'pred_prob'] = pred
     oof.loc[val_df.index, 'fold'] = fold_idx
 
+oof['pred_bin'] = (oof['pred_prob'] >= 0.5).astype(int)
+oof['correct'] = (oof['pred_bin'] == oof['actual']).astype(int)
+oof.to_csv('outputs/oof_predictions_no_sweep_bay.csv', index=True)
+
+oof_accuracy = oof['correct'].mean()
+naive_test = stats.binomtest(
+    int(oof['correct'].sum()),
+    n=len(oof),
+    p=0.5,
+    alternative='greater'
+)
+date_results = oof.groupby('TS').agg(
+    correct=('correct', 'sum'),
+    observations=('correct', 'size')
+)
+date_results['accuracy'] = date_results['correct'] / date_results['observations']
+daily_mean_accuracy = date_results['accuracy'].mean()
+
+rng = np.random.default_rng(42)
+bootstrap_accuracies = np.empty(5000)
+for bootstrap_idx in range(len(bootstrap_accuracies)):
+    sampled_dates = rng.integers(0, len(date_results), len(date_results))
+    sampled = date_results.iloc[sampled_dates]
+    bootstrap_accuracies[bootstrap_idx] = (
+        sampled['correct'].sum() / sampled['observations'].sum()
+    )
+
+bootstrap_ci = np.percentile(bootstrap_accuracies, [2.5, 97.5])
+bootstrap_p = (
+    np.count_nonzero(bootstrap_accuracies - oof_accuracy <= 0.5 - oof_accuracy) + 1
+) / (len(bootstrap_accuracies) + 1)
+print(f"OOF accuracy: {oof_accuracy:.4%}")
+print(f"OOF edge over 50%: {oof_accuracy - 0.5:+.4%}")
+print(f"Naive iid binomial p-value: {naive_test.pvalue:.3e}")
+print(f"Unweighted mean daily accuracy: {daily_mean_accuracy:.4%}")
+print(f"Daily block-bootstrap 95% CI: {bootstrap_ci[0]:.4%} to {bootstrap_ci[1]:.4%}")
+print(f"Daily block-bootstrap p-value vs 50%: {bootstrap_p:.3e}")
+
 mean = np.mean(scores_minimal) * 100
 std = np.std(scores_minimal) * 100
 
